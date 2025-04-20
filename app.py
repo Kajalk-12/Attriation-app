@@ -1,4 +1,5 @@
 import dash
+from flask import Flask
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State
 import pandas as pd
@@ -301,3 +302,5 @@ if __name__ == '__main__':
     
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=10000)
+
+app = Flask(__name__)
