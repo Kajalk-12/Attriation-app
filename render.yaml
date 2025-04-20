@@ -8,3 +8,4 @@ services:
     envVars:
       - key: PORT
         value: 10000 # Optional: Render sets PORT env internally
+startCommand: gunicorn app:app
