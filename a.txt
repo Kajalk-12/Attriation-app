@@ -1,0 +1,194 @@
+import dash
+import dash_bootstrap_components as dbc
+from dash import html, dcc, Input, Output, State
+import pandas as pd
+import numpy as np
+import base64
+import io
+
+# Dropdown Options
+DROPDOWN_OPTIONS = {
+    'JobSatisfaction': [
+        {'label': 'Low', 'value': '1'},
+        {'label': 'Medium', 'value': '2'},
+        {'label': 'High', 'value': '3'},
+        {'label': 'Very High', 'value': '4'},
+        {'label': 'Exceptional', 'value': '5'}
+    ],
+    'WorkLifeBalance': [
+        {'label': 'Poor', 'value': '1'},
+        {'label': 'Below Average', 'value': '2'},
+        {'label': 'Good', 'value': '3'},
+        {'label': 'Excellent', 'value': '4'}
+    ],
+    'PerformanceRating': [
+        {'label': 'Below Expectations', 'value': '1'},
+        {'label': 'Needs Improvement', 'value': '2'},
+        {'label': 'Meets Expectations', 'value': '3'},
+        {'label': 'Exceeds Expectations', 'value': '4'}
+    ],
+    'OverTime': [
+        {'label': 'Works Overtime', 'value': 'Yes'},
+        {'label': 'Standard Hours', 'value': 'No'}
+    ],
+    'RelationshipSatisfaction': [
+        {'label': 'Low', 'value': '1'},
+        {'label': 'Medium', 'value': '2'},
+        {'label': 'High', 'value': '3'},
+        {'label': 'Very High', 'value': '4'}
+    ],
+    'CareerGrowthOpportunity': [
+        {'label': 'Low', 'value': '1'},
+        {'label': 'Medium', 'value': '2'},
+        {'label': 'High', 'value': '3'},
+        {'label': 'Very High', 'value': '4'}
+    ],
+    'StockOptionLevel': [
+        {'label': 'None', 'value': '0'},
+        {'label': 'Basic', 'value': '1'},
+        {'label': 'Moderate', 'value': '2'},
+        {'label': 'High', 'value': '3'}
+    ],
+    'JobLevel': [
+        {'label': 'Entry Level', 'value': '1'},
+        {'label': 'Junior', 'value': '2'},
+        {'label': 'Mid', 'value': '3'},
+        {'label': 'Senior', 'value': '4'},
+        {'label': 'Executive', 'value': '5'}
+    ]
+}
+
+# Numeric Features
+NUMERIC_FEATURES = ['Age', 'MonthlyIncome', 'YearsAtCompany', 'TotalWorkingYears', 
+                    'WorkHours', 'DistanceFromHome', 'TrainingHoursLastYear']
+
+# Initialize Dash App
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app.title = "RecruitEase"
+
+# Navbar
+navbar = dbc.Navbar(
+    dbc.Container([
+        dbc.Row([
+            dbc.Col(html.Img(src='/assets/logo.png', height="30px")),
+            dbc.Col(dbc.NavbarBrand("RecruitEase", className="ml-2", style={"color": "white"}))
+        ], align="center"),
+        dbc.Nav([
+            dbc.NavItem(dbc.NavLink("Home", href="/", style={"color": "#F8F9FA"})),
+            dbc.NavItem(dbc.NavLink("Dashboard", href="/dashboard", style={"color": "#F8F9FA"})),
+            dbc.NavItem(dbc.NavLink("Resume Scorer", href="/resume-scorer", style={"color": "#F8F9FA"})),
+            dbc.NavItem(dbc.NavLink("Profile", href="/profile", style={"color": "#F8F9FA"}))
+        ], className="ml-auto")
+    ]), color="#0968ed", dark=True
+)
+
+# App Layout
+app.layout = dbc.Container([
+    navbar,
+    
+    dcc.Store(id="stored-prediction"),  # Store for maintaining the same prediction
+
+    dbc.Card([
+        dbc.CardHeader(html.H3("Employee Attrition Predictor", className="text-center")),
+        dbc.CardBody([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Upload Dataset (CSV)"),
+                    dcc.Upload(
+                        id='upload-data',
+                        children=dbc.Button("Select CSV File", color="primary"),
+                        multiple=False
+                    )
+                ], width=12)
+            ], className="mb-3"),
+
+            # Feature Inputs
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label(feature),
+                    dcc.Dropdown(
+                        id=f"{feature}-dropdown",
+                        options=DROPDOWN_OPTIONS.get(feature, []),
+                        placeholder=f"Select {feature}"
+                    )
+                ], width=4)
+                for feature in DROPDOWN_OPTIONS.keys()
+            ]),
+
+            # Numeric Inputs
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label(feature),
+                    dbc.Input(id=feature, type="number", placeholder=f"Enter {feature}")
+                ], width=4)
+                for feature in NUMERIC_FEATURES
+            ], className="mt-3"),
+
+            # Prediction Button
+            dbc.Row([
+                dbc.Col([
+                    dbc.Button("Predict Attrition Risk", id="predict-button", color="primary", className="mt-3 w-100")
+                ])
+            ])
+        ])
+    ], className="mt-4"),
+
+    html.Div(id='prediction-output')
+], fluid=True)
+
+
+# Callback for File Upload
+@app.callback(
+    Output('upload-data', 'children'),
+    Input('upload-data', 'contents'),
+    State('upload-data', 'filename')
+)
+def handle_file_upload(contents, filename):
+    if contents is not None:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        try:
+            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+            return dbc.Alert(f"File {filename} uploaded successfully!", color="success")
+        except Exception as e:
+            return dbc.Alert(f"Error processing file: {str(e)}", color="danger")
+    return dbc.Button("Select CSV File", color="primary")
+
+# Prediction Callback
+# Prediction Callback
+@app.callback(
+    [Output('prediction-output', 'children'),
+     Output('stored-prediction', 'data')],  # Store prediction result
+    Input('predict-button', 'n_clicks'),
+    [State(f'{feature}-dropdown', 'value') for feature in DROPDOWN_OPTIONS.keys()] +
+    [State(feature, 'value') for feature in NUMERIC_FEATURES] +
+    [State('stored-prediction', 'data')],  # Fetch stored prediction
+    prevent_initial_call=True
+)
+def predict_attrition(n_clicks, *args):
+    stored_prediction = args[-1]  # Last argument is stored prediction
+    user_input = args[:-1]  # Exclude stored prediction
+
+    # If a prediction is already stored, return it
+    if stored_prediction is not None:
+        return stored_prediction, stored_prediction  # Return stored result
+
+    # Otherwise, generate a new prediction
+    risk_levels = ['Low', 'Medium', 'High']
+    predicted_risk = np.random.choice(risk_levels)
+
+    result_card = dbc.Card([
+        dbc.CardHeader("Attrition Risk Prediction"),
+        dbc.CardBody([
+            html.H4(f"Predicted Attrition Risk: {predicted_risk}"),
+            html.P("This is a simulated prediction. Actual risk assessment requires a trained ML model.")
+        ])
+    ])
+
+    return result_card, result_card  # Store the new prediction
+
+
+# Run the app
+if __name__ == '__main__':
+    app.run(debug=True)
+
