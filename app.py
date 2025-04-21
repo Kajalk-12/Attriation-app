@@ -1,116 +1,59 @@
 import dash
-from flask import Flask, request, jsonify, render_template  # assuming you're already using Flask
-
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State
+from flask import Flask, request, jsonify
 import pandas as pd
 import numpy as np
 import base64
 import io
 import joblib
 
+# Create Flask App first
+flask_app = Flask(__name__)
 
-app = Flask(__name__)
-
-@app.route("/")
+@flask_app.route("/")
 def home():
     return "✅ Employee Attrition Predictor is Live!"
 
-# Initialize Dash App
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server
+# Create Dash app with the Flask server
+app = dash.Dash(
+    __name__, 
+    server=flask_app, 
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True
+)
+
+# Set app title
 app.title = "RecruitEase"
 
-# Try to load the trained model, feature names and label encoders
+# Try loading model and assets
 try:
     model = joblib.load("attrition_model.pkl")
     label_encoders = joblib.load("label_encoders.pkl")
-    # Load feature names exactly as they were during training
     feature_names = joblib.load("feature_names.pkl")
     model_loaded = True
-    print("Model and encoders loaded successfully")
-    print("Feature names from model:", feature_names)
+    print("Model and encoders loaded successfully.")
 except Exception as e:
+    print(f"Model loading error: {e}")
     model_loaded = False
     feature_names = []
-    print(f"Error loading model: {e}")
 
 # Dropdown Options
 DROPDOWN_OPTIONS = {
-    'JobSatisfaction': [
-        {'label': 'Low', 'value': '1'},
-        {'label': 'Medium', 'value': '2'},
-        {'label': 'High', 'value': '3'},
-        {'label': 'Very High', 'value': '4'},
-        {'label': 'Exceptional', 'value': '5'}
-    ],
-    'WorkLifeBalance': [
-        {'label': 'Poor', 'value': '1'},
-        {'label': 'Below Average', 'value': '2'},
-        {'label': 'Good', 'value': '3'},
-        {'label': 'Excellent', 'value': '4'}
-    ],
-    'PerformanceRating': [
-        {'label': 'Below Expectations', 'value': '1'},
-        {'label': 'Needs Improvement', 'value': '2'},
-        {'label': 'Meets Expectations', 'value': '3'},
-        {'label': 'Exceeds Expectations', 'value': '4'}
-    ],
-    'OverTime': [
-        {'label': 'Works Overtime', 'value': 'Yes'},
-        {'label': 'Standard Hours', 'value': 'No'}
-    ],
-    'RelationshipSatisfaction': [
-        {'label': 'Low', 'value': '1'},
-        {'label': 'Medium', 'value': '2'},
-        {'label': 'High', 'value': '3'},
-        {'label': 'Very High', 'value': '4'},
-        {'label': 'Exceptional', 'value': '5'}
-    ],
-    'CareerGrowthOpportunity': [
-        {'label': 'Low', 'value': '1'},
-        {'label': 'Medium', 'value': '2'},
-        {'label': 'High', 'value': '3'},
-        {'label': 'Very High', 'value': '4'}
-    ],
-    'StockOptionLevel': [
-        {'label': 'None', 'value': '0'},
-        {'label': 'Basic', 'value': '1'},
-        {'label': 'Moderate', 'value': '2'},
-        {'label': 'High', 'value': '3'}
-    ],
-    'JobLevel': [
-        {'label': 'Entry Level', 'value': '1'},
-        {'label': 'Junior', 'value': '2'},
-        {'label': 'Mid', 'value': '3'},
-        {'label': 'Senior', 'value': '4'},
-        {'label': 'Executive', 'value': '5'}
-    ]
+    'JobSatisfaction': [{'label': l, 'value': str(i+1)} for i, l in enumerate(['Low', 'Medium', 'High', 'Very High', 'Exceptional'])],
+    'WorkLifeBalance': [{'label': l, 'value': str(i+1)} for i, l in enumerate(['Poor', 'Below Average', 'Good', 'Excellent'])],
+    'PerformanceRating': [{'label': l, 'value': str(i+1)} for i, l in enumerate(['Below Expectations', 'Needs Improvement', 'Meets Expectations', 'Exceeds Expectations'])],
+    'OverTime': [{'label': 'Works Overtime', 'value': 'Yes'}, {'label': 'Standard Hours', 'value': 'No'}],
+    'RelationshipSatisfaction': [{'label': l, 'value': str(i+1)} for i, l in enumerate(['Low', 'Medium', 'High', 'Very High', 'Exceptional'])],
+    'CareerGrowthOpportunity': [{'label': l, 'value': str(i+1)} for i, l in enumerate(['Low', 'Medium', 'High', 'Very High'])],
+    'StockOptionLevel': [{'label': l, 'value': str(i)} for i, l in enumerate(['None', 'Basic', 'Moderate', 'High'])],
+    'JobLevel': [{'label': l, 'value': str(i+1)} for i, l in enumerate(['Entry Level', 'Junior', 'Mid', 'Senior', 'Executive'])]
 }
 
-# Get categorical and numeric features from loaded feature names
-CATEGORICAL_FEATURES = [
-    'JobSatisfaction', 
-    'WorkLifeBalance', 
-    'PerformanceRating', 
-    'OverTime',
-    'RelationshipSatisfaction', 
-    'CareerGrowthOpportunity', 
-    'StockOptionLevel', 
-    'JobLevel'
-]
+CATEGORICAL_FEATURES = list(DROPDOWN_OPTIONS.keys())
+NUMERIC_FEATURES = ['Age', 'MonthlyIncome', 'YearsAtCompany', 'TotalWorkingYears', 'WorkHours', 'DistanceFromHome', 'TrainingHoursLastYear']
 
-NUMERIC_FEATURES = [
-    'Age', 
-    'MonthlyIncome', 
-    'YearsAtCompany', 
-    'TotalWorkingYears', 
-    'WorkHours', 
-    'DistanceFromHome', 
-    'TrainingHoursLastYear'
-]
-
-# Custom CSS for the navbar icons
+# HTML Template for font-awesome
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -140,20 +83,15 @@ navbar = dbc.Navbar(
             dbc.Col(dbc.NavbarBrand("RecruitEase", className="ml-2", style={"color": "white"}))
         ], align="center"),
         dbc.Nav([
-            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-home mr-1"), " Home"], href="/", style={"color": "#F8F9FA"})),
-            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-chart-bar mr-1"), " Dashboard"], href="/dashboard", style={"color": "#F8F9FA"})),
-            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-user-plus mr-1"), " Recruitment"], href="/recruitment", style={"color": "#F8F9FA"})),
-            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-file-alt mr-1"), " Resume Score"], href="/resume-score", style={"color": "#F8F9FA"})),
-            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-user-minus mr-1"), " Attrition"], href="/attrition", style={"color": "#F8F9FA", "font-weight": "bold"})),
-            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-comment-dots mr-1"), " ChatBot"], href="/chatbot", style={"color": "#F8F9FA"}))
+            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-home mr-1"), " Home"], href="/")),
+            dbc.NavItem(dbc.NavLink([html.I(className="fas fa-user-minus mr-1"), " Attrition"], href="#", style={"font-weight": "bold"}))
         ], className="ml-auto")
     ]), color="#2563EB", dark=True
 )
 
-# App Layout
+# Layout
 app.layout = dbc.Container([
     navbar,
-
     dbc.Card([
         dbc.CardHeader(html.H3("Employee Attrition Predictor", className="text-center")),
         dbc.CardBody([
@@ -165,23 +103,19 @@ app.layout = dbc.Container([
                         children=dbc.Button("Select CSV File", color="primary", style={"background-color": "#2563EB"}),
                         multiple=False
                     )
-                ], width=12)
+                ])
             ], className="mb-3"),
 
-            # Feature Inputs - Categorical
+            # Dropdowns for categorical
             dbc.Row([
                 dbc.Col([
                     dbc.Label(feature),
-                    dcc.Dropdown(
-                        id=f"{feature}-dropdown",
-                        options=DROPDOWN_OPTIONS.get(feature, []),
-                        placeholder=f"Select {feature}"
-                    )
+                    dcc.Dropdown(id=f"{feature}-dropdown", options=DROPDOWN_OPTIONS[feature], placeholder=f"Select {feature}")
                 ], width=4)
                 for feature in CATEGORICAL_FEATURES
             ]),
 
-            # Numeric Inputs
+            # Inputs for numeric
             dbc.Row([
                 dbc.Col([
                     dbc.Label(feature),
@@ -190,11 +124,10 @@ app.layout = dbc.Container([
                 for feature in NUMERIC_FEATURES
             ], className="mt-3"),
 
-            # Prediction Button
+            # Button
             dbc.Row([
                 dbc.Col([
-                    dbc.Button("Predict Attrition Risk", id="predict-button", color="primary", 
-                              className="mt-3 w-100", style={"background-color": "#2563EB"})
+                    dbc.Button("Predict Attrition Risk", id="predict-button", color="primary", className="mt-3 w-100", style={"background-color": "#2563EB"})
                 ])
             ])
         ])
@@ -203,7 +136,7 @@ app.layout = dbc.Container([
     html.Div(id='prediction-output')
 ], fluid=True)
 
-# Callback for File Upload
+# File upload
 @app.callback(
     Output('upload-data', 'children'),
     Input('upload-data', 'contents'),
@@ -214,13 +147,13 @@ def handle_file_upload(contents, filename):
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
         try:
-            df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+            pd.read_csv(io.StringIO(decoded.decode('utf-8')))
             return dbc.Alert(f"File {filename} uploaded successfully!", color="success")
         except Exception as e:
             return dbc.Alert(f"Error processing file: {str(e)}", color="danger")
     return dbc.Button("Select CSV File", color="primary", style={"background-color": "#2563EB"})
 
-# Prediction Callback
+# Prediction logic
 @app.callback(
     Output('prediction-output', 'children'),
     Input('predict-button', 'n_clicks'),
@@ -231,81 +164,41 @@ def handle_file_upload(contents, filename):
 def predict_attrition(n_clicks, *args):
     if None in args or "" in args:
         return dbc.Alert("Please fill out all fields.", color="warning")
-    
-    # Check if model is loaded
+
     if not model_loaded:
-        return dbc.Alert("Model not loaded. Please train the model first.", color="danger")
-    
+        return dbc.Alert("Model not loaded. Please check deployment logs.", color="danger")
+
     try:
-        print("Arguments received:", args)
-        
-        # Create input dataframe with features in the EXACT same order as during training
-        input_data = {}
-        
-        # First, initialize with all the features that were used during training
-        for feature in feature_names:
-            input_data[feature] = [0]  # Placeholder value
-            
-        # Then fill in with actual values
-        # Process categorical inputs
+        input_data = {feature: [0] for feature in feature_names}
+
+        # Fill categorical values
         for i, feature in enumerate(CATEGORICAL_FEATURES):
-            value = args[i]
-            if feature == 'OverTime':
-                # OverTime is 'Yes'/'No'
-                input_data[feature] = [value]
-            else:
-                # Other categorical features are numeric strings
-                input_data[feature] = [int(value)]
-                
-        # Process numeric inputs
+            val = args[i]
+            input_data[feature] = [val if feature == 'OverTime' else int(val)]
+
+        # Fill numeric values
         for i, feature in enumerate(NUMERIC_FEATURES):
-            value = args[i + len(CATEGORICAL_FEATURES)]
-            input_data[feature] = [float(value)]
-            
-        # Create DataFrame with exact column order from training
-        input_df = pd.DataFrame(input_data)
-        input_df = input_df[feature_names]  # Ensure exact same order as training
-        
-        print("Input DataFrame columns:", input_df.columns.tolist())
-        
-        # Apply label encoders for categorical features
+            input_data[feature] = [float(args[len(CATEGORICAL_FEATURES) + i])]
+
+        df = pd.DataFrame(input_data)[feature_names]
+
+        # Label encoding
         for feature, encoder in label_encoders.items():
-            if feature in input_df.columns:
-                if feature == 'OverTime':
-                    # Handle OverTime which is Yes/No
-                    input_df[feature] = encoder.transform(input_df[feature])
-                else:
-                    # For other categorical features, convert to string first (matches training)
-                    input_df[feature] = encoder.transform(input_df[feature].astype(str))
-        
-        # Double-check that columns match exactly what the model expects
-        print("Final DataFrame columns for prediction:", input_df.columns.tolist())
-        
-               # Make prediction
-        prediction = model.predict(input_df)[0]
-        prediction_proba = model.predict_proba(input_df)[0]
+            if feature == 'OverTime':
+                df[feature] = encoder.transform(df[feature])
+            else:
+                df[feature] = encoder.transform(df[feature].astype(str))
 
-        # Determine attrition probability
-        attrition_probability = prediction_proba[1]  # Assuming '1' corresponds to 'Yes' for attrition
+        # Predict
+        pred = model.predict(df)[0]
+        label = "⚠️ Likely to Leave" if pred == 1 else "✅ Likely to Stay"
+        color = "danger" if pred == 1 else "success"
 
-        if prediction == 1:
-            result_text = f"⚠️ The employee is likely to leave. Attrition Risk: {attrition_probability * 100:.2f}%"
-            color = "danger"
-        else:
-            result_text = f"✅ The employee is likely to stay. Attrition Risk: {attrition_probability * 100:.2f}%"
-            color = "success"
-
-        return dbc.Alert(result_text, color=color)
+        return dbc.Alert(f"Prediction: {label}", color=color)
 
     except Exception as e:
-        print(f"Error during prediction: {e}")
-        return dbc.Alert(f"An error occurred during prediction: {e}", color="danger")
+        return dbc.Alert(f"Prediction error: {str(e)}", color="danger")
 
-# Run the app
-if __name__ == '__main__':
-    app.run(debug=True)
-    
-if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=10000)
-
-app = Flask(__name__)
+# Run Flask server (for deployment via gunicorn or locally)
+if __name__ == "__main__":
+    flask_app.run(debug=True)
