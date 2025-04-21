@@ -1,5 +1,6 @@
 import dash
-from flask import Flask
+from flask import Flask, request, jsonify, render_template  # assuming you're already using Flask
+
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State
 import pandas as pd
@@ -9,7 +10,11 @@ import io
 import joblib
 
 
+app = Flask(__name__)
 
+@app.route("/")
+def home():
+    return "✅ Employee Attrition Predictor is Live!"
 
 # Initialize Dash App
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
