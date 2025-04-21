@@ -12,6 +12,8 @@ import joblib
 
 # Initialize Dash App
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+server = app.server
+
 app.run_server(debug=True, host='0.0.0.0', port=10000)
 
 app.title = "RecruitEase"
@@ -279,3 +281,4 @@ def predict_attrition(n_clicks, *args):
     
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=10000)
+
