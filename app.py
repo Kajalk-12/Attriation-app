@@ -12,7 +12,7 @@ import joblib
 
 # Initialize Dash App
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server
+
 
 app.run_server(debug=True, host='0.0.0.0', port=10000)
 
