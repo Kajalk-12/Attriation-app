@@ -1,32 +1,27 @@
 import dash
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State
-from flask import Flask, request, jsonify
+from flask import Flask
 import pandas as pd
 import numpy as np
 import base64
 import io
 import joblib
 
-# Create Flask App first
+# Create Flask app
 flask_app = Flask(__name__)
 
-@flask_app.route("/")
-def home():
-    return "✅ Employee Attrition Predictor is Live!"
-
-# Create Dash app with the Flask server
+# Create Dash app
 app = dash.Dash(
-    __name__, 
-    server=flask_app, 
+    __name__,
+    server=flask_app,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True
 )
 
-# Set app title
 app.title = "RecruitEase"
 
-# Try loading model and assets
+# Load model & encoders
 try:
     model = joblib.load("attrition_model.pkl")
     label_encoders = joblib.load("label_encoders.pkl")
@@ -53,7 +48,7 @@ DROPDOWN_OPTIONS = {
 CATEGORICAL_FEATURES = list(DROPDOWN_OPTIONS.keys())
 NUMERIC_FEATURES = ['Age', 'MonthlyIncome', 'YearsAtCompany', 'TotalWorkingYears', 'WorkHours', 'DistanceFromHome', 'TrainingHoursLastYear']
 
-# HTML Template for font-awesome
+# Font Awesome support
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -102,11 +97,11 @@ app.layout = dbc.Container([
                         id='upload-data',
                         children=dbc.Button("Select CSV File", color="primary", style={"background-color": "#2563EB"}),
                         multiple=False
-                    )
+                    ),
+                    html.Div(id="upload-message")
                 ])
             ], className="mb-3"),
 
-            # Dropdowns for categorical
             dbc.Row([
                 dbc.Col([
                     dbc.Label(feature),
@@ -115,7 +110,6 @@ app.layout = dbc.Container([
                 for feature in CATEGORICAL_FEATURES
             ]),
 
-            # Inputs for numeric
             dbc.Row([
                 dbc.Col([
                     dbc.Label(feature),
@@ -124,7 +118,6 @@ app.layout = dbc.Container([
                 for feature in NUMERIC_FEATURES
             ], className="mt-3"),
 
-            # Button
             dbc.Row([
                 dbc.Col([
                     dbc.Button("Predict Attrition Risk", id="predict-button", color="primary", className="mt-3 w-100", style={"background-color": "#2563EB"})
@@ -136,9 +129,9 @@ app.layout = dbc.Container([
     html.Div(id='prediction-output')
 ], fluid=True)
 
-# File upload
+# File Upload Handler
 @app.callback(
-    Output('upload-data', 'children'),
+    Output('upload-message', 'children'),
     Input('upload-data', 'contents'),
     State('upload-data', 'filename')
 )
@@ -148,12 +141,12 @@ def handle_file_upload(contents, filename):
         decoded = base64.b64decode(content_string)
         try:
             pd.read_csv(io.StringIO(decoded.decode('utf-8')))
-            return dbc.Alert(f"File {filename} uploaded successfully!", color="success")
+            return dbc.Alert(f"✅ File '{filename}' uploaded successfully!", color="success")
         except Exception as e:
-            return dbc.Alert(f"Error processing file: {str(e)}", color="danger")
-    return dbc.Button("Select CSV File", color="primary", style={"background-color": "#2563EB"})
+            return dbc.Alert(f"❌ Error processing file: {str(e)}", color="danger")
+    return ""
 
-# Prediction logic
+# Prediction Handler
 @app.callback(
     Output('prediction-output', 'children'),
     Input('predict-button', 'n_clicks'),
@@ -162,43 +155,45 @@ def handle_file_upload(contents, filename):
     prevent_initial_call=True
 )
 def predict_attrition(n_clicks, *args):
-    if None in args or "" in args:
-        return dbc.Alert("Please fill out all fields.", color="warning")
-
     if not model_loaded:
-        return dbc.Alert("Model not loaded. Please check deployment logs.", color="danger")
+        return dbc.Alert("Model not loaded. Please check deployment.", color="danger")
+
+    if None in args or "" in args:
+        return dbc.Alert("⚠️ Please fill out all fields before prediction.", color="warning")
 
     try:
         input_data = {feature: [0] for feature in feature_names}
 
-        # Fill categorical values
+        # Categorical
         for i, feature in enumerate(CATEGORICAL_FEATURES):
             val = args[i]
-            input_data[feature] = [val if feature == 'OverTime' else int(val)]
+            input_data[feature] = [val]
 
-        # Fill numeric values
+        # Numeric
         for i, feature in enumerate(NUMERIC_FEATURES):
             input_data[feature] = [float(args[len(CATEGORICAL_FEATURES) + i])]
 
         df = pd.DataFrame(input_data)[feature_names]
 
-        # Label encoding
+        # Encoding
         for feature, encoder in label_encoders.items():
-            if feature == 'OverTime':
-                df[feature] = encoder.transform(df[feature])
-            else:
-                df[feature] = encoder.transform(df[feature].astype(str))
+            df[feature] = encoder.transform(df[feature].astype(str))
 
         # Predict
         pred = model.predict(df)[0]
-        label = "⚠️ Likely to Leave" if pred == 1 else "✅ Likely to Stay"
+        label = "⚠️ High Attrition Risk" if pred == 1 else "✅ Low Attrition Risk"
         color = "danger" if pred == 1 else "success"
 
-        return dbc.Alert(f"Prediction: {label}", color=color)
+        return dbc.Alert(f"Prediction: {label}", color=color, className="mt-3")
 
     except Exception as e:
-        return dbc.Alert(f"Prediction error: {str(e)}", color="danger")
+        return dbc.Alert(f"Prediction Error: {str(e)}", color="danger")
 
-# Run Flask server (for deployment via gunicorn or locally)
+# Remove root Flask route to avoid conflict with Dash (optional)
+# @flask_app.route("/")
+# def home():
+#     return "✅ RecruitEase is Live!"
+
+# Run App
 if __name__ == "__main__":
     flask_app.run(debug=True)
